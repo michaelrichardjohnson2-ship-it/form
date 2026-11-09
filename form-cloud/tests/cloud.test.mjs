@@ -1,0 +1,15 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {issue,verify,authenticated,sameOrigin,cookie} from '../server/security.mjs';
+import {validate,saveChanges} from '../server/records.mjs';
+import auth from '../netlify/functions/auth.mjs';
+import tracker from '../netlify/functions/tracker.mjs';
+const password='test-only-password-not-for-production';
+process.env.FORM_PASSWORD=password;
+const origin='https://form.example';
+const req=(path,method='GET',body,headers={})=>new Request(origin+'/.netlify/functions/'+path,{method,headers:{origin,...headers},...(body?{body:JSON.stringify(body)}:{})});
+test('sessions reject tampering, expiry and a changed password',()=>{const token=issue(password);assert.ok(verify(token,password));assert.equal(verify(token+'x',password),false);assert.equal(verify(token,password+'new'),false);assert.equal(verify(issue(password,0),password),false);assert.match(cookie(token),/HttpOnly; Secure; SameSite=Strict/);assert.equal(sameOrigin(req('auth','POST',{}, {origin:'https://evil.example'})),false)});
+test('private data requires a valid session',async()=>{const r=await tracker(req('tracker'));assert.equal(r.status,401);const r2=await tracker(req('tracker','POST',{changes:[]},{cookie:'__Host-form-session=forged'}));assert.equal(r2.status,401)});
+test('login validates password, issues cookie, rejects cross-site requests',async()=>{assert.equal((await auth(req('auth','POST',{password:'wrong'}))).status,401);assert.equal((await auth(req('auth','POST',{password},{origin:'https://evil.example'}))).status,403);const r=await auth(req('auth','POST',{password}));assert.equal(r.status,200);const c=r.headers.get('set-cookie');assert.ok(authenticated(req('auth','GET',undefined,{cookie:c.split(';')[0]}),password));assert.match(r.headers.get('cache-control'),/no-store/)});
+test('entry validation rejects future and invalid states and non-Sunday weights',()=>{assert.ok(validate([{type:'habit',date:'2026-11-09',habit:2,state:3}]));assert.ok(validate([{type:'weight',date:'2026-11-08',kg:82}]));assert.equal(validate([{type:'weight',date:'2026-11-09',kg:82}]),false);assert.equal(validate([{type:'habit',date:'2099-11-09',habit:0,state:1}]),false);assert.equal(validate([{type:'habit',date:'2026-11-09',habit:0,state:9}]),false)});
+test('concurrent device updates retain both records using conditional writes',async()=>{let data=null,version=0;const store={async getWithMetadata(){const snapshot=data?{data:structuredClone(data),etag:String(version)}:null;await Promise.resolve();return snapshot},async setJSON(key,next,options){if(options.onlyIfNew&&data||options.onlyIfMatch&&options.onlyIfMatch!==String(version))return {modified:false};data=structuredClone(next);version++;return {modified:true}}};await Promise.all([saveChanges(store,[{type:'habit',date:'2026-11-09',habit:0,state:1}]),saveChanges(store,[{type:'habit',date:'2026-11-09',habit:1,state:3}])]);assert.equal(data.entries.length,2);await saveChanges(store,[{type:'habit',date:'2026-11-09',habit:0,state:2}]);assert.equal(data.entries.length,2);assert.equal(data.entries.find(e=>e.habit===0).state,2)});
