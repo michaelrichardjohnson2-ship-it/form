@@ -1,0 +1,19 @@
+CONNECT YOUR GODADDY DOMAIN TO FORM
+
+1. In Netlify, open your Form project → Domain management → Add a domain → Add a domain you already own. Enter your domain.
+2. In GoDaddy, open your domain → DNS → DNS Records.
+3. Set these records (replace YOUR-SITE with your Netlify project address):
+   A       @       75.2.60.5
+   CNAME   www     YOUR-SITE.netlify.app
+   Edit existing records for @ and www rather than adding conflicting duplicates. Remove conflicting A/AAAA records for these names. Leave email/MX records unchanged.
+4. In Netlify, make www.yourdomain.com the primary domain. Check Domain management → HTTPS after DNS updates. DNS can take up to 48 hours.
+
+This directs your domain's main website to Form, replacing any existing website at that address.
+
+IPHONE
+After the updated site is deployed, open your final domain in Safari → Share → Add to Home Screen → name it Form → Add. If you already have an old shortcut, remove it and add it again to refresh the icon.
+
+Official guides:
+https://docs.netlify.com/manage/domains/configure-domains/configure-external-dns/
+https://www.godaddy.com/en-uk/help/add-or-edit-an-a-record-42546
+https://support.apple.com/en-eg/guide/iphone/iphea86e5236/ios
